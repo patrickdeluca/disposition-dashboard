@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dispositions</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://kit.fontawesome.com/a076d05399.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="bg-gray-100 p-6">
+    <div class="container mx-auto">
+        <button id="add-disposition-btn" class="bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 transition duration-300">Add Disposition</button>
+        <table class="min-w-full bg-white mt-6 shadow-md rounded-lg overflow-hidden">
+            <thead>
+                <tr>
+                    <th class="py-3 px-6 bg-gray-200 font-bold uppercase text-sm text-gray-600 border-b border-gray-300">Name</th>
+                    <th class="py-3 px-6 bg-gray-200 font-bold uppercase text-sm text-gray-600 border-b border-gray-300">Description</th>
+                    <th class="py-3 px-6 bg-gray-200 font-bold uppercase text-sm text-gray-600 border-b border-gray-300">Enabled</th>
+                    <th class="py-3 px-6 bg-gray-200 font-bold uppercase text-sm text-gray-600 border-b border-gray-300">Actions</th>
+                    <th class="py-3 px-6 bg-gray-200 font-bold uppercase text-sm text-gray-600 border-b border-gray-300">Icons</th>
+                    <th class="py-3 px-6 bg-gray-200 font-bold uppercase text-sm text-gray-600 border-b border-gray-300">Expand</th>
+                </tr>
+            </thead>
+            <tbody id="dispositions-table-body">
+                <!-- Rows will be dynamically generated here -->
+            </tbody>
+        </table>
+    </div>
+
+    <div id="add-disposition-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex justify-center items-center">
+        <div class="bg-white p-6 rounded-lg w-1/3">
+            <h2 class="text-xl font-bold mb-4">Add New Disposition</h2>
+            <input type="text" id="new-disposition-name" placeholder="Disposition Name" class="border-gray-300 rounded-md shadow-sm w-full mb-4 p-2">
+            <textarea id="new-disposition-description" placeholder="Description" class="border-gray-300 rounded-md shadow-sm w-full mb-4 p-2"></textarea>
+            <div class="flex justify-end space-x-4">
+                <button class="close-modal-btn bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600 transition duration-300">Cancel</button>
+                <button id="save-new-disposition-btn" class="bg-green-500 text-white px-6 py-2 rounded-full hover:bg-green-600 transition duration-300">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5000'; // Replace with your actual API URL
+
+        let dispositions = [];
+
+        async function fetchDispositions() {
+            try {
+                const response = await fetch(`${API_URL}/api/dispositions`);
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                dispositions = await response.json();
+                renderDispositions();
+            } catch (error) {
+                console.error('Error fetching dispositions:', error);
+                alert('Error fetching dispositions. Please try again later.');
+            }
+        }
+
+        function renderDispositions() {
+            const tableBody = document.getElementById('dispositions-table-body');
+            tableBody.innerHTML = '';
+
+            dispositions.forEach((dispo, index) => {
+                const mainRow = document.createElement('tr');
+                mainRow.classList.add('bg-white', 'border-b');
+
+                const actionIcons = getActionIcons(dispo);
+
+                mainRow.innerHTML = `
+                    <td class="py-4 px-6">${dispo.name}</td>
+                    <td class="py-4 px-6">${dispo.description}</td>
+                    <td class="py-4 px-6">
+                        <input type="checkbox" ${dispo.enabled ? 'checked' : ''} onchange="toggleEnabled(${index}, this)">
+                    </td>
+                    <td class="py-4 px-6">${dispo.actions.length}</td>
+                    <td class="py-4 px-6">${actionIcons}</td>
+                    <td class="py-4 px-6">
+                        <button class="text-blue-500 hover:text-blue-700" onclick="toggleExpand(this)">Expand</button>
+                    </td>
+                `;
+
+                const expandedRow = document.createElement('tr');
+                expandedRow.classList.add('hidden', 'bg-gray-100');
+                expandedRow.innerHTML = `
+                    <td colspan="6" class="p-4">
+                        <div class="disposition-expanded">
+                            <label class="block font-semibold mb-2">Description:</label>
+                            <textarea class="border-gray-300 rounded-md shadow-sm w-full mb-4 p-2">${dispo.description}</textarea>
+                            <div class="expanded-content">
+                                <label class="block font-semibold mb-2">Contact On:</label>
+                                <input type="checkbox" ${dispo.contactOn ? 'checked' : ''} onchange="toggleContactFields(this)">
+                                <label class="block font-semibold mb-2 mt-4">Drip Campaign:</label>
+                                <input type="checkbox" ${dispo.dripCampaign ? 'checked' : ''} onchange="toggleDripCampaign(this)">
+                                <div class="drip-uuid-container ${dispo.dripCampaign ? '' : 'hidden'} mt-4">
+                                    <label class="block font-semibold mb-2">Drip Campaign UUID:</label>
+                                    <input type="text" class="drip-uuid-input border-gray-300 rounded-md shadow-sm w-full p-2" value="${dispo.dripCampaignUUID}">
+                                </div>
+                                <div class="actions-container ${dispo.dripCampaign ? 'disabled' : ''} mt-4">
+                                    ${dispo.actions.map(action => `
+                                        <div class="action-row bg-white p-4 rounded-lg shadow-sm mb-4">
+                                            <label class="font-semibold mb-2 block">Target:</label>
+                                            <select class="border-gray-300 rounded-md shadow-sm w-full mb-2 p-2">
+                                                <option value="customer" ${action.target === 'customer' ? 'selected' : ''}>Customer</option>
+                                                <option value="dealer" ${action.target === 'dealer' ? 'selected' : ''}>Dealer</option>
+                                                <option value="internal" ${action.target === 'internal' ? 'selected' : ''}>Internal</option>
+                                            </select>
+                                            <input type="text" placeholder="Template ID" class="border-gray-300 rounded-md shadow-sm w-full mb-2 p-2" aria-label="Template ID" value="${action.templateId}">
+                                            <select class="border-gray-300 rounded-md shadow-sm w-full mb-2 p-2">
+                                                <option value="none">Select Action</option>
+                                                <option value="sendgrid" ${action.actionType === 'sendgrid' ? 'selected' : ''}>SendGrid</option>
+                                                <option value="twilio" ${action.actionType === 'twilio' ? 'selected' : ''}>Twilio</option>
+                                            </select>
+                                            <button class="text-red-700 mt-2 hover:text-red-900" onclick="removeAction(this)" aria-label="Remove Action">Remove Action</button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <button class="mt-4 bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 transition duration-300 ${dispo.dripCampaign ? 'disabled' : ''}" aria-label="Add Action" onclick="addAction(this)">Add Action</button>
+                            </div>
+                            <div class="flex justify-end items-center space-x-4 mt-4">
+                                <button class="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600 transition duration-300" onclick="cancelEdit(this)">Cancel</button>
+                                <button class="bg-green-500 text-white px-6 py-2 rounded-full hover:bg-green-600 transition duration-300" onclick="saveEdit(this, ${index})">Save</button>
+                            </div>
+                        </div>
+                    </td>
+                `;
+
+                tableBody.appendChild(mainRow);
+                tableBody.appendChild(expandedRow);
+            });
+        }
+
+        function getActionIcons(dispo) {
+            const emailIcon = '<i class="fas fa-envelope text-blue-500"></i>';
+            const phoneIcon = '<i class="fas fa-mobile-alt text-green-500"></i>';
+            const dripIcon = '<i class="fas fa-tint text-purple-500"></i>';
+
+            let icons = '';
+            if (dispo.dripCampaign) {
+                icons += dripIcon;
+            } else {
+                dispo.actions.forEach(action => {
+                    if (action.actionType === 'sendgrid') {
+                        icons += emailIcon;
+                    } else if (action.action 
+                    .actionType === 'twilio') {
+                        icons += phoneIcon;
+                    }
+                });
+            }
+            return icons;
+        }
+
+        function toggleEnabled(index, checkbox) {
+            dispositions[index].enabled = checkbox.checked;
+            // Optionally, update the server with the new state
+            updateDisposition(dispositions[index]);
+        }
+
+        function toggleExpand(button) {
+            const expandedRow = button.closest('tr').nextElementSibling;
+            expandedRow.classList.toggle('hidden');
+        }
+
+        document.getElementById('add-disposition-btn').addEventListener('click', () => {
+            document.getElementById('add-disposition-modal').classList.remove('hidden');
+        });
+
+        document.querySelectorAll('.close-modal-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('add-disposition-modal').classList.add('hidden');
+            });
+        });
+
+        document.getElementById('save-new-disposition-btn').addEventListener('click', async () => {
+            const name = document.getElementById('new-disposition-name').value.trim();
+            const description = document.getElementById('new-disposition-description').value.trim();
+
+            if (name && description) {
+                const newDisposition = {
+                    name,
+                    description,
+                    enabled: true,
+                    contactOn: true,
+                    actions: [],
+                    dripCampaign: false,
+                    dripCampaignUUID: ''
+                };
+
+                try {
+                    const response = await fetch(`${API_URL}/api/dispositions`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newDisposition)
+                    });
+                    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                    fetchDispositions();
+                } catch (error) {
+                    console.error('Error saving disposition:', error);
+                    alert('An error occurred while saving the disposition. Please try again.');
+                }
+
+                document.getElementById('add-disposition-modal').classList.add('hidden');
+            } else {
+                alert('Please fill in both the name and description fields.');
+            }
+        });
+
+        function toggleContactFields(checkbox) {
+            const container = checkbox.closest('.disposition-expanded');
+            const actionsContainer = container.querySelector('.actions-container');
+            const addActionButton = container.querySelector('button[aria-label="Add Action"]');
+
+            if (checkbox.checked) {
+                actionsContainer.classList.remove('disabled');
+                addActionButton.classList.remove('disabled');
+            } else {
+                actionsContainer.classList.add('disabled');
+                addActionButton.classList.add('disabled');
+            }
+        }
+
+        function toggleDripCampaign(checkbox) {
+            const container = checkbox.closest('.disposition-expanded');
+            const actionsContainer = container.querySelector('.actions-container');
+            const dripUuidContainer = container.querySelector('.drip-uuid-container');
+
+            if (checkbox.checked) {
+                actionsContainer.classList.add('disabled');
+                dripUuidContainer.classList.remove('hidden');
+            } else {
+                actionsContainer.classList.remove('disabled');
+                dripUuidContainer.classList.add('hidden');
+            }
+        }
+
+        function addAction(button) {
+            const container = button.closest('.disposition-expanded').querySelector('.actions-container');
+            const actionRow = document.createElement('div');
+            actionRow.classList.add('action-row', 'bg-white', 'p-4', 'rounded-lg', 'shadow-sm', 'mb-4');
+            actionRow.innerHTML = `
+                <label class="font-semibold mb-2 block">Target:</label>
+                <select class="border-gray-300 rounded-md shadow-sm w-full mb-2 p-2">
+                    <option value="customer">Customer</option>
+                    <option value="dealer">Dealer</option>
+                    <option value="internal">Internal</option>
+                </select>
+                <input type="text" placeholder="Template ID" class="border-gray-300 rounded-md shadow-sm w-full mb-2 p-2" aria-label="Template ID">
+                <select class="border-gray-300 rounded-md shadow-sm w-full mb-2 p-2">
+                    <option value="none">Select Action</option>
+                    <option value="sendgrid">SendGrid</option>
+                    <option value="twilio">Twilio</option>
+                </select>
+                <button class="text-red-700 mt-2 hover:text-red-900" onclick="removeAction(this)" aria-label="Remove Action">Remove Action</button>
+            `;
+            container.appendChild(actionRow);
+        }
+
+        function removeAction(button) {
+            button.closest('.action-row').remove();
+        }
+
+        function cancelEdit(button) {
+            const expandedRow = button.closest('tr');
+            expandedRow.classList.add('hidden');
+        }
+
+        async function saveEdit(button, index) {
+            const container = button.closest('.disposition-expanded');
+            const description = container.querySelector('textarea').value.trim();
+            const contactOn = container.querySelector('input[type="checkbox"]').checked;
+            const dripCampaign = container.querySelector('input[type="checkbox"]').checked;
+            const dripCampaignUUID = container.querySelector('.drip-uuid-input').value.trim();
+
+            const actions = Array.from(container.querySelectorAll('.action-row')).map(row => ({
+                target: row.querySelector('select').value,
+                templateId: row.querySelector('input[type="text"]').value.trim(),
+                actionType: row.querySelector('select:nth-of-type(2)').value
+            }));
+
+            const updatedDisposition = {
+                ...dispositions[index],
+                description,
+                contactOn,
+                dripCampaign,
+                dripCampaignUUID,
+                actions
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/api/dispositions/${dispositions[index].id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updatedDisposition)
+                });
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                fetchDispositions();
+            } catch (error) {
+                console.error('Error saving disposition:', error);
+                alert('An error occurred while saving the disposition. Please try again.');
+            }
+
+            container.closest('tr').classList.add('hidden');
+        }
+
+        async function updateDisposition(disposition) {
+            try {
+                const response = await fetch(`${API_URL}/api/dispositions/${disposition.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(disposition)
+                });
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                fetchDispositions();
+            } catch (error) {
+                console.error('Error updating disposition:', error);
+                alert('An error occurred while updating the disposition. Please try again.');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchDispositions();
+        });
+    </script>
+</body>
+
+</html>
