@@ -206,6 +206,7 @@ project-root/
 - **Optimize Database Queries**: Ensure that database interactions are efficient and consider indexing frequently queried fields.
 - **Refactor and Modularize**: As the application grows, consider refactoring code into smaller modules or components.
 - **Testing**: Write unit and integration tests to ensure the application functions as expected.
+- **Integration**: Integrate designed functionality into DEALS including teathering disposition changes to event triggers, pulling from the main dispositions database as maintained by this integration.
 
 ---
 
